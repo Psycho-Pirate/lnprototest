@@ -44,15 +44,14 @@ class LDKConn(lnprototest.Conn):
         super().__init__(connprivkey)
         # FIXME: pyln.proto.wire should just use coincurve PrivateKey!
         
-        self.logger.debug("print")
-        self.logger.debug("adding connectionnnn")
+        self.logger.debug("adding connection")
         
         self.connection = proc.stdin.write(
             
                 bytes("connectpeer 0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798@127.0.0.1:{}".format(port), 'utf-8')
             
         )
-        self.logger.debug("conn added")
+        self.logger.debug("connection added")
 
 class Runner(lnprototest.Runner):
     def __init__(self, config: Any):
@@ -89,7 +88,7 @@ class Runner(lnprototest.Runner):
             .split(', ')
         )
         os.chdir(wd)
-        #print(opts)
+        
         self.options: Dict[str, str] = {}
         val: Dict[str, str] = {}
         val['supported'] = 'odd'
@@ -124,7 +123,7 @@ class Runner(lnprototest.Runner):
 
 
     def __init_sandbox_dir(self) -> None:
-        """Create the tmp directory for lnprotest and lightningd"""
+        """Create the tmp directory for lnprotest and ldk"""
         self.ldk_dir = os.path.join(self.directory, "ldk")
         if not os.path.exists(self.ldk_dir):
             os.makedirs(self.ldk_dir)
@@ -170,8 +169,7 @@ class Runner(lnprototest.Runner):
             stdin=subprocess.PIPE
         )
         self.running = True
-        logging.debug("logging")
-        self.logger.debug("RUN ldk ")
+        self.logger.debug("RUN ldk")
         '''
         def node_ready(rpc: pyln.client.LightningRpc) -> bool:
             try:
@@ -404,11 +402,7 @@ class Runner(lnprototest.Runner):
     def get_output_message(
         self, conn: Conn, event: Event, timeout: int = TIMEOUT
     ) -> Optional[bytes]:
-        fut = self.executor.submit(cast(LDKConn, conn).connection.read_message)
-        try:
-            return fut.result(timeout)
-        except (futures.TimeoutError, ValueError):
-            return None
+        pass
 
     def check_error(self, event: Event, conn: Conn) -> Optional[str]:
         # We get errors in form of err msgs, always.
