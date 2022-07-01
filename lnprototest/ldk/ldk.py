@@ -14,6 +14,7 @@ import bitcoin.core
 import struct
 import shutil
 import logging
+import signal
 
 from datetime import date
 from concurrent import futures
@@ -32,26 +33,24 @@ from lnprototest import wait_for
 from typing import Dict, Any, Callable, List, Optional, cast
 
 TIMEOUT = int(os.getenv("TIMEOUT", "30"))
-LDK_SRC = os.path.join(os.getcwd(), os.getenv("LDK_SRC", "../ldk-sample/"))
-logging.basicConfig(level=logging.DEBUG)
+LDK_SRC = os.path.join(os.getcwd(), os.getenv("LDK_SRC", "../ldk-sample"))
 
 class LDKConn(lnprototest.Conn):
-    
-    def __init__(self, connprivkey: str, port: int, proc):
-        self.logger = logging.getLogger(__name__)
-        self.logger.setLevel(logging.DEBUG)
-        
+    def __init__(self, connprivkey: str, port: int, node_id: str):
         super().__init__(connprivkey)
         # FIXME: pyln.proto.wire should just use coincurve PrivateKey!
-        
-        self.logger.debug("adding connection")
-        
-        self.connection = proc.stdin.write(
-            
-                bytes("connectpeer 0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798@127.0.0.1:{}".format(port), 'utf-8')
-            
+        self.pubkey=node_id
+        self.connection = pyln.proto.wire.connect(
+            pyln.proto.wire.PrivateKey(bytes.fromhex(self.connprivkey.to_hex())),
+            # FIXME: Ask node for pubkey
+            pyln.proto.wire.PublicKey(
+                bytes.fromhex(
+                    node_id
+                )
+            ),
+            "127.0.0.1",
+            port,
         )
-        self.logger.debug("connection added")
 
 class Runner(lnprototest.Runner):
     def __init__(self, config: Any):
@@ -65,30 +64,19 @@ class Runner(lnprototest.Runner):
         self.is_fundchannel_kill = False
         self.executor = futures.ThreadPoolExecutor(max_workers=20)
         self.ldk_port = reserve()
+        self.node_id = None
 
-        self.startup_flags = []
-        for flag in config.getoption("runner_args"):
-            self.startup_flags.append("--{}".format(flag))
-
-
-        wd = os.getcwd()
-        os.chdir(LDK_SRC)
         opts = (
             subprocess.run(
                 [
-                    "cargo",
-                    "run",
-                    "--example",
-                    "features",
+                    "{}/target/debug/examples/features".format(LDK_SRC)
                 ],
                 stdout=subprocess.PIPE,
-                check=True,
             )
             .stdout.decode("utf-8")
             .split(', ')
         )
-        os.chdir(wd)
-        
+
         self.options: Dict[str, str] = {}
         val: Dict[str, str] = {}
         val['supported'] = 'odd'
@@ -156,41 +144,35 @@ class Runner(lnprototest.Runner):
             self.logger.debug(f"Exception with message {ex}")
         
         self.logger.debug("RUN Bitcoind")
-        os.chdir(LDK_SRC)
+
         self.proc = subprocess.Popen(
             [
-                "cargo", 
-                "run",
-                "{}:{}@127.0.0.1:{}".format("rpcuser","rpcpass",self.bitcoind.port),
-                "./", 
-                "{}".format(self.ldk_port),
-                "regtest"
+            "{}/target/debug/ldk-tutorial-node".format(LDK_SRC),
+            "{}:{}@127.0.0.1:{}".format("rpcuser","rpcpass",self.bitcoind.port),
+            "{}/".format(self.ldk_dir),
+            "{}".format(self.ldk_port),
+            "regtest",
             ],
-            stdin=subprocess.PIPE
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            preexec_fn=os.setsid
         )
+        #os.chdir(wd)     
+        self.proc.stdout.readline()
+        self.proc.stdout.readline()
+        self.node_id=self.proc.stdout.readline().decode("utf-8")[17:83]
         self.running = True
-        self.logger.debug("RUN ldk")
-        '''
-        def node_ready(rpc: pyln.client.LightningRpc) -> bool:
-            try:
-                rpc.getinfo()
-                return True
-            except Exception as ex:
-                logging.debug(f"waiting for c-lightning: Exception received {ex}")
-                return False
-
-        wait_for(lambda: node_ready(self.rpc))
-        logging.debug("Waited fro c-lightning")
-
-        # Make sure that we see any funds that come to our wallet
-        for i in range(5):
-            self.rpc.newaddr()
-        '''
+        self.logger.debug("Node id >>> {}".format(self.node_id))
+        self.logger.debug("RUN LDK")
+        self.logger.debug("<><><>")
+        assert False
 
     def shutdown(self) -> None:
         for cb in self.cleanup_callbacks:
             cb()
-        self.rpc.stop()
+        self.proc.stdin.write(bytes("exit\n", 'utf-8'))
+        self.proc.stdin.flush()
+        os.killpg(os.getpgid(self.proc.pid), signal.SIGTERM) 
         self.bitcoind.stop()
 
     def stop(self, print_logs: bool = False) -> None:
@@ -198,18 +180,20 @@ class Runner(lnprototest.Runner):
         self.shutdown()
         self.running = False
         for c in self.conns.values():
-            cast(LDKConn, c).connection.connection.close()
+            cast(LDKConn, c).connection.connection.close()        
+        """
         if print_logs:
-            log_path = f"{self.ldk_dir}/regtest/log"
+            log_path = f"{self.ldk_dir}/.ldk/logs/logs.txt"
             with open(log_path) as log:
-                self.logger.info("---------- c-lightning logging ----------------")
+                self.logger.info("---------- ldk logging ----------------")
                 self.logger.info(log.read())
                 # now we make a backup of the log
                 shutil.copy(
                     log_path,
-                    f'/tmp/c-lightning-log_{date.today().strftime("%b-%d-%Y_%H:%M:%S")}',
+                    f'/tmp/ldk-log_{date.today().strftime("%b-%d-%Y_%H:%M:%S")}',
                 )
-        shutil.rmtree(os.path.join(self.ldk_dir, "regtest"))
+        shutil.rmtree(os.path.join(self.ldk_dir, ".ldk"))
+        """
 
     def restart(self) -> None:
         self.logger.debug("[RESTART]")
@@ -229,8 +213,7 @@ class Runner(lnprototest.Runner):
                 pass
 
     def connect(self, event: Event, connprivkey: str) -> None:
-        self.logger.debug("add connection")
-        self.add_conn(LDKConn(connprivkey, self.ldk_port, self.proc))
+        self.add_conn(LDKConn(connprivkey, self.ldk_port, self.node_id))
 
     def getblockheight(self) -> int:
         return self.bitcoind.rpc.getblockcount()
@@ -247,6 +230,7 @@ class Runner(lnprototest.Runner):
         wait_for(lambda: self.rpc.getinfo()["blockheight"] == self.getblockheight())
 
     def recv(self, event: Event, conn: Conn, outbuf: bytes) -> None:
+        self.logger.debug("recv")
         try:
             cast(LDKConn, conn).connection.send_message(outbuf)
         except BrokenPipeError:
@@ -259,13 +243,14 @@ class Runner(lnprototest.Runner):
                 msg = fut.result(1)
             except futures.TimeoutError:
                 msg = None
+            self.logger.debug("<<<{}>>>".format(len(msg)))
             if msg:
                 raise EventError(
                     event, "Connection closed after sending {}".format(msg.hex())
                 )
             else:
                 raise EventError(event, "Connection closed")
-
+    
     def fundchannel(
         self,
         event: Event,
@@ -274,50 +259,7 @@ class Runner(lnprototest.Runner):
         feerate: int = 253,
         expect_fail: bool = False,
     ) -> None:
-        """
-        event       - the event which cause this, for error logging
-        conn        - which conn (i.e. peer) to fund.
-        amount      - amount to fund the channel with
-        feerate     - feerate, in kiloweights
-        expect_fail - true if this command is expected to error/fail
-        """
-        # First, check that another fundchannel isn't already running
-        if self.fundchannel_future:
-            if not self.fundchannel_future.done():
-                raise RuntimeError(
-                    "{} called fundchannel while another channel funding (fundchannel/init_rbf) is still in process".format(
-                        event
-                    )
-                )
-            self.fundchannel_future = None
-
-        def _fundchannel(
-            runner: Runner,
-            conn: Conn,
-            amount: int,
-            feerate: int,
-            expect_fail: bool = False,
-        ) -> str:
-            peer_id = conn.pubkey.format().hex()
-            # Need to supply feerate here, since regtest cannot estimate fees
-            return runner.rpc.fundchannel(
-                peer_id, amount, feerate="{}perkw".format(feerate)
-            )
-
-        def _done(fut: Any) -> None:
-            exception = fut.exception(0)
-            if exception and not self.is_fundchannel_kill and not expect_fail:
-                raise (exception)
-            self.fundchannel_future = None
-            self.is_fundchannel_kill = False
-            self.cleanup_callbacks.remove(self.kill_fundchannel)
-
-        fut = self.executor.submit(
-            _fundchannel, self, conn, amount, feerate, expect_fail
-        )
-        fut.add_done_callback(_done)
-        self.fundchannel_future = fut
-        self.cleanup_callbacks.append(self.kill_fundchannel)
+        pass
 
     def init_rbf(
         self,
@@ -329,84 +271,32 @@ class Runner(lnprototest.Runner):
         utxo_outnum: int,
         feerate: int,
     ) -> None:
-
-        if self.fundchannel_future:
-            self.kill_fundchannel()
-
-        startweight = 42 + 172  # base weight, funding output
-        # Build a utxo using the given utxo
-        fmt_feerate = "{}perkw".format(feerate)
-        utxos = ["{}:{}".format(utxo_txid, utxo_outnum)]
-        initial_psbt = self.rpc.utxopsbt(
-            amount,
-            fmt_feerate,
-            startweight,
-            utxos,
-            reservedok=True,
-            min_witness_weight=110,
-            locktime=0,
-            excess_as_change=True,
-        )["psbt"]
-
-        def _run_rbf(runner: Runner, conn: Conn) -> Dict[str, Any]:
-            bump = runner.rpc.openchannel_bump(
-                channel_id, amount, initial_psbt, funding_feerate=fmt_feerate
-            )
-            update = runner.rpc.openchannel_update(channel_id, bump["psbt"])
-
-            # Run until they're done sending us updates
-            while not update["commitments_secured"]:
-                update = runner.rpc.openchannel_update(channel_id, update["psbt"])
-            signed_psbt = runner.rpc.signpsbt(update["psbt"])["signed_psbt"]
-            return runner.rpc.openchannel_signed(channel_id, signed_psbt)
-
-        def _done(fut: Any) -> None:
-            exception = fut.exception(0)
-            if exception:
-                raise (exception)
-
-        fut = self.executor.submit(_run_rbf, self, conn)
-        fut.add_done_callback(_done)
-
+        pass
+    
     def invoice(self, event: Event, amount: int, preimage: str) -> None:
-        self.rpc.invoice(
-            msatoshi=amount,
-            label=str(event),
-            description="invoice from {}".format(event),
-            preimage=preimage,
-        )
+        pass
 
     def accept_add_fund(self, event: Event) -> None:
-        self.rpc.call(
-            "funderupdate",
-            {
-                "policy": "match",
-                "policy_mod": 100,
-                "fuzz_percent": 0,
-                "leases_only": False,
-            },
-        )
-
+        pass
+    
     def addhtlc(self, event: Event, conn: Conn, amount: int, preimage: str) -> None:
-        payhash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
-        routestep = {
-            "msatoshi": amount,
-            "id": conn.pubkey.format().hex(),
-            # We internally add one.
-            "delay": 4,
-            # We actually ignore this.
-            "channel": "1x1x1",
-        }
-        self.rpc.sendpay([routestep], payhash)
+        pass
 
     def get_output_message(
         self, conn: Conn, event: Event, timeout: int = TIMEOUT
     ) -> Optional[bytes]:
-        pass
+        fut = self.executor.submit(cast(LDKConn, conn).connection.read_message)
+        self.logger.debug("{}".format(len(fut.result(timeout))))
+        try:
+            return fut.result(timeout)
+        except (futures.TimeoutError, ValueError):
+            return None
 
     def check_error(self, event: Event, conn: Conn) -> Optional[str]:
         # We get errors in form of err msgs, always.
+        self.logger.debug("check123")
         super().check_error(event, conn)
+        self.logger.debug("check")
         msg = self.get_output_message(conn, event)
         if msg is None:
             return None
