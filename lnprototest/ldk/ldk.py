@@ -38,11 +38,10 @@ LDK_SRC = os.path.join(os.getcwd(), os.getenv("LDK_SRC", "../ldk-sample"))
 class LDKConn(lnprototest.Conn):
     def __init__(self, connprivkey: str, port: int, node_id: str):
         super().__init__(connprivkey)
-        # FIXME: pyln.proto.wire should just use coincurve PrivateKey!
         self.pubkey=node_id
         self.connection = pyln.proto.wire.connect(
             pyln.proto.wire.PrivateKey(bytes.fromhex(self.connprivkey.to_hex())),
-            # FIXME: Ask node for pubkey
+
             pyln.proto.wire.PublicKey(
                 bytes.fromhex(
                     node_id
@@ -56,7 +55,6 @@ class Runner(lnprototest.Runner):
     def __init__(self, config: Any):
         super().__init__(config)
         self.running = False
-        self.rpc = None
         self.bitcoind = None
         self.proc = None
         self.cleanup_callbacks: List[Callable[[], None]] = []
@@ -157,16 +155,14 @@ class Runner(lnprototest.Runner):
             stdout=subprocess.PIPE,
             preexec_fn=os.setsid
         )
-        #os.chdir(wd)     
+
         self.proc.stdout.readline()
         self.proc.stdout.readline()
         self.node_id=self.proc.stdout.readline().decode("utf-8")[17:83]
         self.running = True
         self.logger.debug("Node id >>> {}".format(self.node_id))
         self.logger.debug("RUN LDK")
-        self.logger.debug("<><><>")
-        assert False
-
+        
     def shutdown(self) -> None:
         for cb in self.cleanup_callbacks:
             cb()
@@ -181,7 +177,7 @@ class Runner(lnprototest.Runner):
         self.running = False
         for c in self.conns.values():
             cast(LDKConn, c).connection.connection.close()        
-        """
+        
         if print_logs:
             log_path = f"{self.ldk_dir}/.ldk/logs/logs.txt"
             with open(log_path) as log:
@@ -190,10 +186,10 @@ class Runner(lnprototest.Runner):
                 # now we make a backup of the log
                 shutil.copy(
                     log_path,
-                    f'/tmp/ldk-log_{date.today().strftime("%b-%d-%Y_%H:%M:%S")}',
+                    f'/tmp/ldk_log_{date.today().strftime("%b-%d-%Y_%H:%M:%S")}',
                 )
         shutil.rmtree(os.path.join(self.ldk_dir, ".ldk"))
-        """
+        
 
     def restart(self) -> None:
         self.logger.debug("[RESTART]")
@@ -203,14 +199,7 @@ class Runner(lnprototest.Runner):
         self.start()
 
     def kill_fundchannel(self) -> None:
-        fut = self.fundchannel_future
-        self.fundchannel_future = None
-        self.is_fundchannel_kill = True
-        if fut:
-            try:
-                fut.result(0)
-            except (SpecFileError, futures.TimeoutError):
-                pass
+        pass
 
     def connect(self, event: Event, connprivkey: str) -> None:
         self.add_conn(LDKConn(connprivkey, self.ldk_port, self.node_id))
@@ -223,14 +212,9 @@ class Runner(lnprototest.Runner):
         self.bitcoind.rpc.invalidateblock(h)
 
     def add_blocks(self, event: Event, txs: List[str], n: int) -> None:
-        for tx in txs:
-            self.bitcoind.rpc.sendrawtransaction(tx)
-        self.bitcoind.rpc.generatetoaddress(n, self.bitcoind.rpc.getnewaddress())
-
-        wait_for(lambda: self.rpc.getinfo()["blockheight"] == self.getblockheight())
+        pass
 
     def recv(self, event: Event, conn: Conn, outbuf: bytes) -> None:
-        self.logger.debug("recv")
         try:
             cast(LDKConn, conn).connection.send_message(outbuf)
         except BrokenPipeError:
@@ -286,7 +270,6 @@ class Runner(lnprototest.Runner):
         self, conn: Conn, event: Event, timeout: int = TIMEOUT
     ) -> Optional[bytes]:
         fut = self.executor.submit(cast(LDKConn, conn).connection.read_message)
-        self.logger.debug("{}".format(len(fut.result(timeout))))
         try:
             return fut.result(timeout)
         except (futures.TimeoutError, ValueError):
@@ -294,9 +277,7 @@ class Runner(lnprototest.Runner):
 
     def check_error(self, event: Event, conn: Conn) -> Optional[str]:
         # We get errors in form of err msgs, always.
-        self.logger.debug("check123")
         super().check_error(event, conn)
-        self.logger.debug("check")
         msg = self.get_output_message(conn, event)
         if msg is None:
             return None
@@ -361,11 +342,4 @@ class Runner(lnprototest.Runner):
         self.startup_flags.append("--{}".format(flag))
 
     def close_channel(self, channel_id: str) -> bool:
-        if self.config.getoption("verbose"):
-            print("[CLOSE CHANNEL '{}']".format(channel_id))
-        try:
-            self.rpc.close(peer_id=channel_id)
-        except Exception as ex:
-            print(ex)
-            return False
-        return True
+        pass
