@@ -124,7 +124,7 @@ class Runner(lnprototest.Runner):
         )
 
     def get_node_privkey(self) -> str:
-        return "01"
+        return "4de6166282c609bd010edd8532173e65a2ea4bc5022996b652824c5efce76751"
 
     def get_node_bitcoinkey(self) -> str:
         return "0000000000000000000000000000000000000000000000000000000000000010"
@@ -147,10 +147,10 @@ class Runner(lnprototest.Runner):
             [
             "{}/target/debug/ldk-tutorial-node".format(LDK_SRC),
             "{}:{}@127.0.0.1:{}".format("rpcuser","rpcpass",self.bitcoind.port),
-            "{}/".format(self.ldk_dir),
+            "{}/".format(LDK_SRC),
             "{}".format(self.ldk_port),
             "regtest",
-            ],
+            ],  
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             preexec_fn=os.setsid
@@ -171,13 +171,13 @@ class Runner(lnprototest.Runner):
         os.killpg(os.getpgid(self.proc.pid), signal.SIGTERM) 
         self.bitcoind.stop()
 
-    def stop(self, print_logs: bool = False) -> None:
+    def stop(self, print_logs: bool = True) -> None:
         self.logger.debug("[STOP]")
         self.shutdown()
         self.running = False
         for c in self.conns.values():
             cast(LDKConn, c).connection.connection.close()        
-        
+        '''
         if print_logs:
             log_path = f"{self.ldk_dir}/.ldk/logs/logs.txt"
             with open(log_path) as log:
@@ -189,7 +189,7 @@ class Runner(lnprototest.Runner):
                     f'/tmp/ldk_log_{date.today().strftime("%b-%d-%Y_%H:%M:%S")}',
                 )
         shutil.rmtree(os.path.join(self.ldk_dir, ".ldk"))
-        
+        '''
 
     def restart(self) -> None:
         self.logger.debug("[RESTART]")
@@ -212,28 +212,34 @@ class Runner(lnprototest.Runner):
         self.bitcoind.rpc.invalidateblock(h)
 
     def add_blocks(self, event: Event, txs: List[str], n: int) -> None:
-        pass
+        for tx in txs:
+            self.bitcoind.rpc.sendrawtransaction(tx)
+        self.bitcoind.rpc.generatetoaddress(n, self.bitcoind.rpc.getnewaddress())
+
 
     def recv(self, event: Event, conn: Conn, outbuf: bytes) -> None:
+        self.logger.debug("recv")
         try:
             cast(LDKConn, conn).connection.send_message(outbuf)
+            self.logger.debug("recv 2")
         except BrokenPipeError:
             # This happens when they've sent an error and closed; try
             # reading it to figure out what went wrong.
             fut = self.executor.submit(
                 cast(LDKConn, conn).connection.read_message
             )
+            self.logger.debug("recv 3")
             try:
                 msg = fut.result(1)
             except futures.TimeoutError:
                 msg = None
-            self.logger.debug("<<<{}>>>".format(len(msg)))
             if msg:
                 raise EventError(
                     event, "Connection closed after sending {}".format(msg.hex())
                 )
             else:
                 raise EventError(event, "Connection closed")
+
     
     def fundchannel(
         self,
@@ -243,7 +249,57 @@ class Runner(lnprototest.Runner):
         feerate: int = 253,
         expect_fail: bool = False,
     ) -> None:
-        pass
+        """
+        event       - the event which cause this, for error logging
+        conn        - which conn (i.e. peer) to fund.
+        amount      - amount to fund the channel with
+        feerate     - feerate, in kiloweights
+        expect_fail - true if this command is expected to error/fail
+        """
+        self.logger.debug("fffund")
+        # First, check that another fundchannel isn't already running
+        if self.fundchannel_future:
+            if not self.fundchannel_future.done():
+                raise RuntimeError(
+                    "{} called fundchannel while another channel funding (fundchannel/init_rbf) is still in process".format(
+                        event
+                    )
+                )   
+            self.fundchannel_future = None
+
+        def _fundchannel(
+            runner: Runner,
+            conn: Conn,
+            amount: int,
+            feerate: int,
+            expect_fail: bool = False,
+        ) -> str:
+            self.logger.debug("___fund")
+            peer_id = conn.pubkey.format().hex()
+            self.proc.stdin.write(bytes("openchannel_test {} {}\n".format(peer_id, amount+feerate), 'utf-8'))
+            self.logger.debug("{}".format(self.proc.stdout.readline()))
+            self.logger.debug("{}".format(self.proc.stdout.readline()))
+            self.logger.debug("{}".format(self.proc.stdout.readline()))
+            self.logger.debug("{}".format(self.proc.stdout.readline()))
+            self.logger.debug("{}".format(self.proc.stdout.readline()))
+            
+
+        def _done(fut: Any) -> None:
+            self.logger.debug("done")
+            exception = fut.exception(0)
+            if exception and not self.is_fundchannel_kill and not expect_fail:
+                raise exception
+            self.fundchannel_future = None
+            self.is_fundchannel_kill = False
+            self.cleanup_callbacks.remove(self.kill_fundchannel)
+
+        fut = self.executor.submit(
+            _fundchannel, self, conn, amount, feerate, expect_fail
+        )
+        self.logger.debug("{}".format(fut))
+        fut.add_done_callback(_done)
+        self.fundchannel_future = fut
+        self.cleanup_callbacks.append(self.kill_fundchannel)
 
     def init_rbf(
         self,
@@ -269,7 +325,10 @@ class Runner(lnprototest.Runner):
     def get_output_message(
         self, conn: Conn, event: Event, timeout: int = TIMEOUT
     ) -> Optional[bytes]:
+        self.logger.debug("gom")
+
         fut = self.executor.submit(cast(LDKConn, conn).connection.read_message)
+        #self.logger.debug("{}".format(fut.result(timeout).hex()))
         try:
             return fut.result(timeout)
         except (futures.TimeoutError, ValueError):
@@ -279,8 +338,10 @@ class Runner(lnprototest.Runner):
         # We get errors in form of err msgs, always.
         super().check_error(event, conn)
         msg = self.get_output_message(conn, event)
+        #self.logger.debug(">{}".format(msg))
         if msg is None:
             return None
+        #self.logger.debug(">>{}".format(msg.hex()))
         return msg.hex()
 
     def check_final_error(
