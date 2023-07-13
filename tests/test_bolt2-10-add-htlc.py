@@ -2,6 +2,7 @@
 # Variations on adding an HTLC.
 
 from lnprototest import (
+    OneOf,
     TryAll,
     Connect,
     Block,
