@@ -14,7 +14,7 @@ def test_unknowns(runner: Runner, namespaceoverride: Any) -> None:
     test = [
         Connect(connprivkey="03"),
         ExpectMsg("init"),
-        Msg("init", globalfeatures="", features=""),
+        Msg("init", globalfeatures=runner.runner_features(globals=True), features=runner.runner_features()),
         TryAll(
             [],
             # BOLT #1:
