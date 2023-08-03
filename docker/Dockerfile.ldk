@@ -53,7 +53,7 @@ RUN cd /tmp/ && \
     mv /tmp/bitcoin-$BITCOIN_VERSION/bin/bitcoin* /usr/local/bin/ && \
     rm -rf bitcoin.tar.gz /tmp/bitcoin-$BITCOIN_VERSION
 
-RUN curl https://sh.rustup.rs -sSf | sh
+RUN curl https://sh.rustup.rs -sSf | bash -s -- -y
 
 RUN pip3 install -U pip && \
     pip3 install -U poetry
