@@ -8,12 +8,17 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get -qq update && \
     apt-get -qq install --no-install-recommends --allow-unauthenticated -yy \
+	autoconf \
+	automake \
 	curl \
 	build-essential \
 	git \
 	locales \
 	python3 \
 	python3-pip \
+	python3-setuptools \
+	python-pkg-resources \
+    python3-dev \
 	virtualenv \
 	wget && \
 	rm -rf /var/lib/apt/lists/*
