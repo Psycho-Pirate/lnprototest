@@ -10,6 +10,7 @@ RUN apt-get -qq update && \
     apt-get -qq install --no-install-recommends --allow-unauthenticated -yy \
 	autoconf \
 	automake \
+    curl \
 	clang \
 	cppcheck \
 	docbook-xml \
@@ -51,6 +52,8 @@ RUN cd /tmp/ && \
     tar -xvzf bitcoin.tar.gz && \
     mv /tmp/bitcoin-$BITCOIN_VERSION/bin/bitcoin* /usr/local/bin/ && \
     rm -rf bitcoin.tar.gz /tmp/bitcoin-$BITCOIN_VERSION
+
+RUN curl https://sh.rustup.rs -sSf | sh
 
 RUN pip3 install -U pip && \
     pip3 install -U poetry
