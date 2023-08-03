@@ -324,7 +324,6 @@ class Runner(lnprototest.Runner):
     def get_output_message(
         self, conn: Conn, event: Event, timeout: int = TIMEOUT
     ) -> Optional[bytes]:
-        self.logger.debug("gom")
         fut = self.executor.submit(cast(LDKConn, conn).connection.read_message)
         try:
             return fut.result(timeout)
