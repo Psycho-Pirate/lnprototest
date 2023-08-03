@@ -2,7 +2,7 @@ name: Integration testing
 
 on:
   push:
-    branches: [master]
+    branches: [master, test_with_script]
   pull_request:
     branches: [master]
   schedule:
