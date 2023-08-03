@@ -191,7 +191,8 @@ class Runner(lnprototest.Runner):
         self.stop(also_bitcoind=False)
         # Make a clean start
         super().restart()
-        self.start()
+        self.bitcoind.restart()
+        self.start(also_bitcoind=False)
 
     def kill_fundchannel(self) -> None:
         fut = self.fundchannel_future
