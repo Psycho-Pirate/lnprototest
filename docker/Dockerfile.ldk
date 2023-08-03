@@ -10,9 +10,9 @@ RUN apt-get -qq update && \
     apt-get -qq install --no-install-recommends --allow-unauthenticated -yy \
 	autoconf \
 	automake \
+    curl \
 	clang \
 	cppcheck \
-	curl \
 	docbook-xml \
 	shellcheck \
 	eatmydata \
