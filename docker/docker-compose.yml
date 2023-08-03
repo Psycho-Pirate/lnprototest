@@ -4,5 +4,4 @@ services:
   lightningd:
     build: 
       context: ../
-      dockerfile: ./docker/Dockerfile.clightning
       dockerfile: ./docker/Dockerfile.ldk
