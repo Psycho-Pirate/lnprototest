@@ -9,4 +9,11 @@ do
     echo "iteration $i failed"
     exit 1
   fi
+do
+  if make check PYTEST_ARGS='--runner=lnprototest.ldk.Runner -n8 --dist=loadfile --log-cli-level=DEBUG'; then
+    echo "iteration $i succeeded"
+  else
+    echo "iteration $i failed"
+    exit 1
+  fi
 done
