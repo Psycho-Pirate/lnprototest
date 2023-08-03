@@ -15,7 +15,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { LN_IMPL: ldk }
+          - { LN_IMPL: ldk}
     steps:
       - uses: actions/checkout@v2
       - name: Integration testing
