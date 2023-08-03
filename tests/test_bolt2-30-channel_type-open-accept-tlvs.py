@@ -89,6 +89,8 @@ def test_open_channel_empty_type(runner: Runner, with_proposal: Any) -> None:
     # This is not a feature bit, so use support_ to mark it.
     if runner.has_option("supports_open_accept_channel_type") is None:
         pytest.skip("Needs supports_open_accept_channel_type")
+    if runner.has_option("option_static_remotekey") == "even":
+        pytest.skip("Implementation does not support empty channel")
 
     local_funding_privkey = "20"
 
