@@ -11,6 +11,7 @@ RUN apt-get -qq update && \
 	curl \
 	build-essential \
 	git \
+	locales \
 	python3 \
 	python3-pip \
 	virtualenv \
