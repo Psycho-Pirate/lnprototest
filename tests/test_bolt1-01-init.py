@@ -85,7 +85,7 @@ def test_echo_init(runner: Runner, namespaceoverride: Any) -> None:
     test = [
         Connect(connprivkey="03"),
         ExpectMsg("init"),
-        Msg("init", globalfeatures="", features=""),
+        Msg("init", globalfeatures=runner.runner_features(globals=True), features=runner.runner_features()),
         # optionally disconnect that first one
         TryAll([], Disconnect()),
         Connect(connprivkey="02"),
@@ -103,7 +103,7 @@ def test_init_check_received_msg(runner: Runner, namespaceoverride: Any) -> None
     sequences = [
         Connect(connprivkey="03"),
         ExpectMsg("init"),
-        Msg("init", globalfeatures="", features=""),
+        Msg("init", globalfeatures=runner.runner_features(globals=True), features=runner.runner_features()),
         # optionally disconnect that first one
         TryAll([], Disconnect()),
         Connect(connprivkey="02"),
@@ -119,7 +119,7 @@ def test_init_invalid_globalfeatures(runner: Runner, namespaceoverride: Any) -> 
     sequences = [
         Connect(connprivkey="03"),
         ExpectMsg("init"),
-        Msg("init", globalfeatures="", features=""),
+        Msg("init", globalfeatures=runner.runner_features(globals=True), features=runner.runner_features()),
         # optionally disconnect that first one
         TryAll([], Disconnect()),
         Connect(connprivkey="02"),
@@ -127,7 +127,8 @@ def test_init_invalid_globalfeatures(runner: Runner, namespaceoverride: Any) -> 
         # BOLT #1:
         # The sending node:...
         #  - SHOULD NOT set features greater than 13 in `globalfeatures`.
-        Msg("init", globalfeatures=bitfield(99), features=""),
+        Msg("init", globalfeatures=runner.runner_features(globals=True, additional_features=[99]), features=runner.runner_features()),
+        
     ]
     run_runner(runner, sequences)
 
@@ -138,7 +139,7 @@ def test_init_is_first_msg(runner: Runner, namespaceoverride: Any) -> None:
     sequences = [
         Connect(connprivkey="03"),
         ExpectMsg("init"),
-        Msg("init", globalfeatures="", features=""),
+        Msg("init", globalfeatures=runner.runner_features(globals=True), features=runner.runner_features()),
         # optionally disconnect that first one
         TryAll([], Disconnect()),
         Connect(connprivkey="02"),
@@ -147,7 +148,7 @@ def test_init_is_first_msg(runner: Runner, namespaceoverride: Any) -> None:
         # The sending node:
         #  - MUST send `init` as the first Lightning message for any connection.
         ExpectMsg("init"),
-        Msg("init", globalfeatures="", features=""),
+        Msg("init", globalfeatures=runner.runner_features(globals=True), features=runner.runner_features()),
     ]
     run_runner(runner, sequences)
 
@@ -158,7 +159,7 @@ def test_init_check_free_featurebits(runner: Runner, namespaceoverride: Any) -> 
     sequences = [
         Connect(connprivkey="03"),
         ExpectMsg("init"),
-        Msg("init", globalfeatures="", features=""),
+        Msg("init", globalfeatures=runner.runner_features(globals=True), features=runner.runner_features()),
         # optionally disconnect that first one
         TryAll([], Disconnect()),
         Connect(connprivkey="02"),
@@ -168,7 +169,7 @@ def test_init_check_free_featurebits(runner: Runner, namespaceoverride: Any) -> 
         #  - upon receiving unknown _odd_ feature bits that are non-zero:
         #    - MUST ignore the bit.
         # init msg with unknown odd local bit (99): no error
-        Msg("init", globalfeatures="", features=bitfield(99)),
+        Msg("init", globalfeatures=runner.runner_features(globals=True), features=runner.runner_features(additional_features=[99])),
     ]
     run_runner(runner, sequences)
 
@@ -181,7 +182,7 @@ def test_init_fail_connection_if_receive_an_even_unknown_featurebits(
     sequences = [
         Connect(connprivkey="03"),
         ExpectMsg("init"),
-        Msg("init", globalfeatures="", features=""),
+        Msg("init", globalfeatures=runner.runner_features(globals=True), features=runner.runner_features()),
         # optionally disconnect that first one
         TryAll([], Disconnect()),
         Connect(connprivkey="02"),
@@ -190,7 +191,7 @@ def test_init_fail_connection_if_receive_an_even_unknown_featurebits(
         #  - upon receiving unknown _even_ feature bits that are non-zero:
         #    - MUST fail the connection.
         ExpectMsg("init"),
-        Msg("init", globalfeatures="", features=bitfield(98)),
+        Msg("init", globalfeatures=runner.runner_features(globals=True), features=runner.runner_features(additional_features=[98])),
         ExpectDisconnect(),
     ]
     run_runner(runner, sequences)
@@ -204,13 +205,13 @@ def test_init_fail_connection_if_receive_an_even_unknown_globalfeaturebits(
     sequences = [
         Connect(connprivkey="03"),
         ExpectMsg("init"),
-        Msg("init", globalfeatures="", features=""),
+        Msg("init", globalfeatures=runner.runner_features(globals=True), features=runner.runner_features()),
         # optionally disconnect that first one
         TryAll([], Disconnect()),
         Connect(connprivkey="02"),
         # init msg with unknown even global bit (98): you will error
         ExpectMsg("init"),
-        Msg("init", globalfeatures=bitfield(98), features=""),
+        Msg("init", globalfeatures=runner.runner_features(globals=True, additional_features=[98]), features=runner.runner_features()),
         ExpectDisconnect(),
     ]
     run_runner(runner, sequences)
@@ -224,7 +225,7 @@ def test_init_fail_ask_for_option_data_loss_protect(
     sequences = [
         Connect(connprivkey="03"),
         ExpectMsg("init"),
-        Msg("init", globalfeatures="", features=""),
+        Msg("init", globalfeatures=runner.runner_features(globals=True), features=runner.runner_features()),
         # optionally disconnect that first one
         TryAll([], Disconnect()),
         Connect(connprivkey="02"),
@@ -233,7 +234,7 @@ def test_init_fail_ask_for_option_data_loss_protect(
         Sequence(
             [
                 ExpectMsg("init", if_match=functools.partial(no_feature, [0, 1])),
-                Msg("init", globalfeatures="", features=bitfield(1)),
+                Msg("init", globalfeatures=runner.runner_features(globals=True), features=runner.runner_features(additional_features=[1])),
             ],
             enable=not runner.has_option("option_data_loss_protect"),
         ),
@@ -249,7 +250,7 @@ def test_init_advertize_option_data_loss_protect(
     sequences = [
         Connect(connprivkey="03"),
         ExpectMsg("init"),
-        Msg("init", globalfeatures="", features=""),
+        Msg("init", globalfeatures=runner.runner_features(globals=True), features=runner.runner_features()),
         # optionally disconnect that first one
         TryAll([], Disconnect()),
         Connect(connprivkey="02"),
@@ -270,7 +271,7 @@ def test_init_required_option_data_loss_protect(
     sequences = [
         Connect(connprivkey="03"),
         ExpectMsg("init"),
-        Msg("init", globalfeatures="", features=""),
+        Msg("init", globalfeatures=runner.runner_features(globals=True), features=runner.runner_features()),
         # optionally disconnect that first one
         TryAll([], Disconnect()),
         Connect(connprivkey="02"),
@@ -291,7 +292,7 @@ def test_init_reject_option_data_loss_protect_if_not_supported(
     sequences = [
         Connect(connprivkey="03"),
         ExpectMsg("init"),
-        Msg("init", globalfeatures="", features=""),
+        Msg("init", globalfeatures=runner.runner_features(globals=True), features=runner.runner_features()),
         # optionally disconnect that first one
         TryAll([], Disconnect()),
         Connect(connprivkey="02"),
@@ -317,7 +318,7 @@ def test_init_advertize_option_anchor_outputs(
     sequences = [
         Connect(connprivkey="03"),
         ExpectMsg("init"),
-        Msg("init", globalfeatures="", features=""),
+        Msg("init", globalfeatures=runner.runner_features(globals=True), features=runner.runner_features()),
         # optionally disconnect that first one
         TryAll([], Disconnect()),
         Connect(connprivkey="02"),
@@ -338,7 +339,7 @@ def test_init_required_option_anchor_outputs(
     sequences = [
         Connect(connprivkey="03"),
         ExpectMsg("init"),
-        Msg("init", globalfeatures="", features=""),
+        Msg("init", globalfeatures=runner.runner_features(globals=True), features=runner.runner_features()),
         # optionally disconnect that first one
         TryAll([], Disconnect()),
         Connect(connprivkey="02"),
@@ -359,7 +360,7 @@ def test_init_advertize_option_static_remotekey(
     sequences = [
         Connect(connprivkey="03"),
         ExpectMsg("init"),
-        Msg("init", globalfeatures="", features=""),
+        Msg("init", globalfeatures=runner.runner_features(globals=True), features=runner.runner_features()),
         # optionally disconnect that first one
         TryAll([], Disconnect()),
         Connect(connprivkey="02"),

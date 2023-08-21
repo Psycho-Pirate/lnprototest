@@ -157,42 +157,40 @@ class Runner(lnprototest.Runner):
         err2 = self.proc.stdout.readline()
         self.node_id = self.proc.stdout.readline().decode("utf-8")[17:83]
         self.running = True
-        self.logger.debug("{}\n{} Node id >>> {}".format(err1, err2, self.node_id))
+        self.logger.debug("{} gggg {} Node id >>> {}".format(err1, err2, self.node_id))
         self.logger.debug("RUN LDK")
 
-    def shutdown(self, also_bitcoind: bool = True) -> None:
+    def shutdown(self) -> None:
         for cb in self.cleanup_callbacks:
             cb()
         self.proc.stdin.write(b"exit")
         self.proc.stdin.flush()
         os.killpg(os.getpgid(self.proc.pid), signal.SIGTERM)
-        if also_bitcoind:
-            self.bitcoind.stop()
+        self.bitcoind.stop()
 
-    def stop(self, print_logs: bool = False, also_bitcoind: bool = True) -> None:
+    def stop(self, print_logs: bool = True) -> None:
         self.logger.debug("[STOP]")
-        self.shutdown(also_bitcoind=also_bitcoind)
+        self.shutdown()
         self.running = False
         for c in self.conns.values():
             cast(LDKConn, c).connection.connection.close()
-        if print_logs:
-            log_path = f"{self.ldk_dir}/.ldk/logs/logs.txt"
-            with open(log_path) as log:
-                self.logger.info("---------- LDK logging ----------------")
-                self.logger.info(log.read())
-                shutil.copy(
-                    log_path,
-                    f'/tmp/ldk-log_{datetime.now().strftime("%b-%d-%Y_%H:%M:%S")}',
-                )
+
+        log_path = f"{self.ldk_dir}/.ldk/logs/logs.txt"
+        with open(log_path) as log:
+            self.logger.info("---------- LDK logging ----------------")
+            self.logger.info(log.read())
+            shutil.copy(
+                log_path,
+                f'/tmp/ldk-log_{datetime.now().strftime("%b-%d-%Y_%H:%M:%S")}',
+            )
         shutil.rmtree(os.path.join(self.ldk_dir, ".ldk"))
 
     def restart(self) -> None:
         self.logger.debug("[RESTART]")
-        self.stop(also_bitcoind=False)
+        self.stop()
         # Make a clean start
         super().restart()
-        self.bitcoind.restart()
-        self.start(also_bitcoind=False)
+        self.start()
 
     def kill_fundchannel(self) -> None:
         fut = self.fundchannel_future
@@ -326,6 +324,7 @@ class Runner(lnprototest.Runner):
     def get_output_message(
         self, conn: Conn, event: Event, timeout: int = TIMEOUT
     ) -> Optional[bytes]:
+        self.logger.debug("gom")
         fut = self.executor.submit(cast(LDKConn, conn).connection.read_message)
         try:
             return fut.result(timeout)
