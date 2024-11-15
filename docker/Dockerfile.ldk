@@ -64,7 +64,7 @@ RUN git config --global user.name "John Doe" && \
 	git config --global user.email johndoe@example.com && \
 	git clone https://github.com/Psycho-Pirate/ldk-sample.git && \
     cd ldk-sample && \
-    git checkout sob2 && \
+    git checkout sob && \
     cargo build
 
 RUN mkdir lnprototest
