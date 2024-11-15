@@ -1,4 +1,5 @@
-FROM ubuntu:22.04
+# FROM ubuntu:22.04
+FROM arm64v8/ubuntu:22.04 
 LABEL mantainer="Prakhar Saxena prakharrsaxena@gmail.com"
 
 WORKDIR /work
@@ -64,7 +65,7 @@ RUN git config --global user.name "John Doe" && \
 	git config --global user.email johndoe@example.com && \
 	git clone https://github.com/Psycho-Pirate/ldk-sample.git && \
     cd ldk-sample && \
-    git checkout sob && \
+    git checkout sob2 && \
     cargo build
 
 RUN mkdir lnprototest
