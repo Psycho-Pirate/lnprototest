@@ -61,9 +61,11 @@ class Runner(lnprototest.Runner):
         self.executor = futures.ThreadPoolExecutor(max_workers=20)
         self.ldk_port = reserve()
         self.node_id = None
-        opts = "DataLossProtect: required, InitialRoutingSync: not supported, UpfrontShutdownScript: supported, GossipQueries: not supported, VariableLengthOnion: required, StaticRemoteKey: required, PaymentSecret: required, BasicMPP: supported, Wumbo: supported, AnchorsNonzeroFeeHtlcTx: not supported, AnchorsZeroFeeHtlcTx: not supported, ShutdownAnySegwit: supported, OnionMessages: not supported, ChannelType: supported, SCIDPrivacy: supported, ZeroConf: supported, unknown flags: none".split(
+
+        opts = "DataLossProtect: required, InitialRoutingSync: not supported, UpfrontShutdownScript: supported, GossipQueries: not supported, VariableLengthOnion: required, StaticRemoteKey: required, PaymentSecret: required, BasicMPP: supported, Wumbo: supported, AnchorsNonzeroFeeHtlcTx: not supported, AnchorsZeroFeeHtlcTx: supported, RouteBlinding: supported, ShutdownAnySegwit: supported, Taproot: not supported, OnionMessages: not supported, ChannelType: supported, SCIDPrivacy: supported, ZeroConf: supported, Trampoline: not supported, unknown flags: none".split(
             ", "
         )
+        
 
         self.options: Dict[str, str] = {}
         val: Dict[str, str] = {}
@@ -120,7 +122,7 @@ class Runner(lnprototest.Runner):
         )
 
     def get_node_privkey(self) -> str:
-        return "0000000000000000000000000000000000000000000000000000000000000001"
+        return "6866b0f3edb7023cc8feaa186611760544efc9e6946b5bb452a094af1730c3b7"
 
     def get_node_bitcoinkey(self) -> str:
         return "0000000000000000000000000000000000000000000000000000000000000010"
@@ -138,7 +140,21 @@ class Runner(lnprototest.Runner):
             self.logger.debug(f"Exception with message {ex}")
 
         self.logger.debug("RUN Bitcoind")
+        keys_seed_path = f"{self.ldk_dir}/.ldk"  
+        if not os.path.exists(keys_seed_path):
+            os.makedirs(keys_seed_path)
+        # import pdb;pdb.set_trace()
+        keys_seed_path = f"{self.ldk_dir}/.ldk/keys_seed" 
+        key = bytes([0] * 32)  # Equivalent to [0; 32]
 
+        try:
+            with open(keys_seed_path, "wb") as f:
+                f.write(key)
+                f.flush() 
+                os.fsync(f.fileno())  
+        except OSError as e:
+            print(f"ERROR: Unable to create keys seed file {keys_seed_path}: {e}")
+            exit(1)
         self.proc = subprocess.Popen(
             [
                 "{}/target/debug/ldk-sample".format(LDK_SRC),
@@ -146,6 +162,7 @@ class Runner(lnprototest.Runner):
                 "{}/".format(self.ldk_dir),
                 "{}".format(self.ldk_port),
                 "regtest",
+                "0000000000000000000000000000000000000000000000000000000000000010/0000000000000000000000000000000000000000000000000000000000000011/0000000000000000000000000000000000000000000000000000000000000012/0000000000000000000000000000000000000000000000000000000000000013/0000000000000000000000000000000000000000000000000000000000000014/FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
             ],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
@@ -272,7 +289,6 @@ class Runner(lnprototest.Runner):
             feerate: int,
             expect_fail: bool = False,
         ) -> str:
-
             self.logger.debug("___fund")
             peer_id = conn.pubkey.format().hex()
             st = bytes(
